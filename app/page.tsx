@@ -16,6 +16,14 @@ export default function AttendanceApp() {
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // 辅助函数：将数据库时间转换为本地 datetime-local 格式，防止时区偏移
+  const toLocalISOString = (dateStr: string) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    const offset = date.getTimezoneOffset() * 60000; 
+    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  };
+
   async function fetchData() {
     const { data: coursesData } = await supabase.from('courses').select('*').order('day_of_week', { ascending: true });
     const { data: recordsData } = await supabase.from('attendance_records').select('*').order('created_at', { ascending: false });
@@ -43,9 +51,11 @@ export default function AttendanceApp() {
   }
 
   async function updateRecordTime(recordId: any, newTime: string) {
+    if (!newTime) return;
+    // 直接更新字符串，由数据库处理时区，避免 JS 本地转换偏差
     const { error } = await supabase
       .from('attendance_records')
-      .update({ created_at: new Date(newTime).toISOString() })
+      .update({ created_at: newTime })
       .eq('id', recordId);
     if (!error) { fetchData(); showSuccess("时间已更新"); }
   }
@@ -93,7 +103,7 @@ export default function AttendanceApp() {
               <table className="w-full border-collapse table-fixed min-w-[380px]">
                 <thead>
                   <tr className="bg-slate-50 border-b">
-                    {/* 改动点 2：把“春”改为“时间带” */}
+                    {/* 2. 把“春”改为“时间带” */}
                     <th className="w-[12%] py-2 text-[10px] font-bold text-slate-400">时间带</th>
                     {days.map(day => <th key={day} className="py-2 text-xs font-bold text-slate-600">{day}曜日</th>)}
                   </tr>
@@ -113,7 +123,6 @@ export default function AttendanceApp() {
                               <div className="flex flex-col h-full items-center justify-center space-y-2">
                                 <div className="text-[10px] font-bold text-[#1E40AF] text-center px-1 leading-tight">{course.name}</div>
                                 <div className="text-[8px] text-slate-400 font-medium">{course.room}</div>
-                                {/* 三色计数球 */}
                                 <div className="flex gap-1 scale-90">
                                   <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white text-[8px] font-bold">{getCount(course.id, '出席')}</div>
                                   <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-400 text-white text-[8px] font-bold">{getCount(course.id, '遅刻')}</div>
@@ -136,7 +145,7 @@ export default function AttendanceApp() {
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <table className="w-full border-collapse text-center">
                 <thead>
-                  {/* 改动点 1：表头字体颜色设为黑色 (text-black) */}
+                  {/* 1. 表头文字设为黑色 text-black */}
                   <tr className="bg-yellow-200 border-b">
                     <th className="py-2 border-r text-xs font-bold text-black">科目名</th>
                     <th className="py-2 border-r text-xs font-bold w-16 text-black">出席</th>
@@ -164,7 +173,7 @@ export default function AttendanceApp() {
         )}
       </AnimatePresence>
 
-      {/* 居中详情面板 (保持原样) */}
+      {/* 居中详情面板 (样式完全保留) */}
       <AnimatePresence>
         {selectedCourse && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -189,7 +198,8 @@ export default function AttendanceApp() {
                   {records.filter(r => r.course_id === selectedCourse.id).map(record => (
                     <div key={record.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
                       <input type="datetime-local" 
-                        defaultValue={new Date(record.created_at).toISOString().slice(0, 16)}
+                        // 使用修复后的本地时间显示函数
+                        defaultValue={toLocalISOString(record.created_at)}
                         onChange={(e) => updateRecordTime(record.id, e.target.value)}
                         className="text-[10px] bg-transparent text-slate-500 outline-none"
                       />
@@ -204,7 +214,6 @@ export default function AttendanceApp() {
         )}
       </AnimatePresence>
 
-      {/* 成功提示 Toast */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
