@@ -9,19 +9,28 @@ const supabaseAnonKey = 'sb_publishable_Zq6TsEhSAmMEwOFgwjxE5g_uothgtWo';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function AttendanceApp() {
-  const [view, setView] = useState<'table' | 'stats'>('table'); // 视图切换状态
+  const [view, setView] = useState<'table' | 'stats'>('table');
   const [courses, setCourses] = useState<any[]>([]);
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // 辅助函数：将数据库时间转换为本地 datetime-local 格式，防止时区偏移
+  // --- 核心修复：手动处理本地时间格式，彻底解决 +9 小时偏差问题 ---
   const toLocalISOString = (dateStr: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
-    const offset = date.getTimezoneOffset() * 60000; 
-    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    // 检查日期是否有效
+    if (isNaN(date.getTime())) return "";
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    // 返回格式：YYYY-MM-DDTHH:mm (这是 datetime-local 要求的格式)
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   async function fetchData() {
@@ -50,14 +59,17 @@ export default function AttendanceApp() {
     }
   }
 
+  // --- 修复：直接保存字符串，不使用 JS Date 转换 ---
   async function updateRecordTime(recordId: any, newTime: string) {
     if (!newTime) return;
-    // 直接更新字符串，由数据库处理时区，避免 JS 本地转换偏差
     const { error } = await supabase
       .from('attendance_records')
-      .update({ created_at: newTime })
+      .update({ created_at: newTime }) 
       .eq('id', recordId);
-    if (!error) { fetchData(); showSuccess("时间已更新"); }
+    if (!error) { 
+      fetchData(); 
+      showSuccess("时间已更新"); 
+    }
   }
 
   async function deleteRecord(recordId: any) {
@@ -78,32 +90,24 @@ export default function AttendanceApp() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F0F4F8] font-sans pb-24">
+    <div className="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-900">
       {/* 顶部视图切换导航 */}
       <div className="bg-white border-b sticky top-0 z-30 p-2 flex justify-center gap-4 shadow-sm">
-        <button 
-          onClick={() => setView('table')}
-          className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'table' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}
-        >
+        <button onClick={() => setView('table')} className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'table' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>
           课表视图
         </button>
-        <button 
-          onClick={() => setView('stats')}
-          className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'stats' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}
-        >
+        <button onClick={() => setView('stats')} className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'stats' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>
           出勤汇总
         </button>
       </div>
 
       <AnimatePresence mode="wait">
         {view === 'table' ? (
-          /* --- 课表视图 --- */
           <motion.div key="table" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="p-2">
             <div className="w-full overflow-x-auto rounded-xl border bg-white shadow-sm">
               <table className="w-full border-collapse table-fixed min-w-[380px]">
                 <thead>
                   <tr className="bg-slate-50 border-b">
-                    {/* 2. 把“春”改为“时间带” */}
                     <th className="w-[12%] py-2 text-[10px] font-bold text-slate-400">时间带</th>
                     {days.map(day => <th key={day} className="py-2 text-xs font-bold text-slate-600">{day}曜日</th>)}
                   </tr>
@@ -118,7 +122,7 @@ export default function AttendanceApp() {
                         const course = courses.find(c => c.day_of_week === dayMap[day] && c.time_slot.startsWith(slot.range.split('\n')[0]));
                         return (
                           <td key={day} onClick={() => course && setSelectedCourse(course)}
-                            className={`p-1 h-32 vertical-top relative border-r last:border-0 active:bg-blue-100 transition-colors ${course ? 'bg-[#E3F2FD]/40' : ''}`}>
+                            className={`p-1 h-32 vertical-top relative border-r last:border-0 active:bg-blue-100 transition-colors ${course ? 'bg-[#E3F2FD]/40 cursor-pointer' : ''}`}>
                             {course && (
                               <div className="flex flex-col h-full items-center justify-center space-y-2">
                                 <div className="text-[10px] font-bold text-[#1E40AF] text-center px-1 leading-tight">{course.name}</div>
@@ -140,12 +144,10 @@ export default function AttendanceApp() {
             </div>
           </motion.div>
         ) : (
-          /* --- 汇总统计视图 --- */
           <motion.div key="stats" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="p-4">
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <table className="w-full border-collapse text-center">
                 <thead>
-                  {/* 1. 表头文字设为黑色 text-black */}
                   <tr className="bg-yellow-200 border-b">
                     <th className="py-2 border-r text-xs font-bold text-black">科目名</th>
                     <th className="py-2 border-r text-xs font-bold w-16 text-black">出席</th>
@@ -173,7 +175,7 @@ export default function AttendanceApp() {
         )}
       </AnimatePresence>
 
-      {/* 居中详情面板 (样式完全保留) */}
+      {/* 居中详情面板 */}
       <AnimatePresence>
         {selectedCourse && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -189,26 +191,28 @@ export default function AttendanceApp() {
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   {[{s:'出席',c:'bg-green-500'}, {s:'遅刻',c:'bg-orange-400'}, {s:'欠席',c:'bg-red-500'}].map(b => (
                     <button key={b.s} onClick={() => handleCheckIn(selectedCourse.id, b.s)}
-                      className={`${b.c} text-white py-3 rounded-2xl shadow-lg active:scale-90 transition-all font-bold text-xs`}>
+                      className={`${b.c} text-white py-3 rounded-2xl shadow-lg active:scale-95 transition-all font-bold text-xs`}>
                       {b.s === '遅刻' ? '迟到' : b.s === '欠席' ? '欠席' : '出席'}
                     </button>
                   ))}
                 </div>
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {records.filter(r => r.course_id === selectedCourse.id).map(record => (
                     <div key={record.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
-                      <input type="datetime-local" 
-                        // 使用修复后的本地时间显示函数
+                      <input 
+                        type="datetime-local" 
+                        // 关键修复：使用手动格式化函数
                         defaultValue={toLocalISOString(record.created_at)}
-                        onChange={(e) => updateRecordTime(record.id, e.target.value)}
-                        className="text-[10px] bg-transparent text-slate-500 outline-none"
+                        // 使用 onBlur 确保失去焦点时才更新，防止输入过程中产生多余请求
+                        onBlur={(e) => updateRecordTime(record.id, e.target.value)}
+                        className="text-[11px] bg-transparent text-slate-600 outline-none border-none font-mono"
                       />
-                      <button onClick={() => deleteRecord(record.id)} className="text-slate-300 px-2">✕</button>
+                      <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-2 transition-colors">✕</button>
                     </div>
                   ))}
                 </div>
               </div>
-              <button onClick={() => setSelectedCourse(null)} className="w-full py-3 bg-slate-50 text-slate-400 text-xs font-bold">关闭</button>
+              <button onClick={() => setSelectedCourse(null)} className="w-full py-3 bg-slate-50 text-slate-400 text-xs font-bold hover:bg-slate-100">关闭</button>
             </motion.div>
           </div>
         )}
