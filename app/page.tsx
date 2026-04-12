@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- 请保留你的真实 Supabase 信息 ---
 const supabaseUrl = 'https://wvmcsjzxsovzhfwxzdlh.supabase.co'; 
 const supabaseAnonKey = 'sb_publishable_Zq6TsEhSAmMEwOFgwjxE5g_uothgtWo'; 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -16,20 +15,16 @@ export default function AttendanceApp() {
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // --- 核心修复：手动处理本地时间格式，彻底解决 +9 小时偏差问题 ---
+  // 1. 读取显示：将数据库带时区的 ISO 字符串转为本地 input 识别的格式
   const toLocalISOString = (dateStr: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
-    // 检查日期是否有效
     if (isNaN(date.getTime())) return "";
-
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    // 返回格式：YYYY-MM-DDTHH:mm (这是 datetime-local 要求的格式)
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
@@ -59,13 +54,19 @@ export default function AttendanceApp() {
     }
   }
 
-  // --- 修复：直接保存字符串，不使用 JS Date 转换 ---
+  // 2. 核心修复：更新保存时，手动给字符串加上本地时区后缀 (+09:00)
   async function updateRecordTime(recordId: any, newTime: string) {
     if (!newTime) return;
+    
+    // 强制补全时区，防止数据库误认 UTC。假设你在日本 JST (+09:00)
+    // 如果在中国则改为 +08:00
+    const timeWithTimezone = `${newTime}:00+09:00`; 
+
     const { error } = await supabase
       .from('attendance_records')
-      .update({ created_at: newTime }) 
+      .update({ created_at: timeWithTimezone }) 
       .eq('id', recordId);
+
     if (!error) { 
       fetchData(); 
       showSuccess("时间已更新"); 
@@ -91,7 +92,6 @@ export default function AttendanceApp() {
 
   return (
     <div className="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-900">
-      {/* 顶部视图切换导航 */}
       <div className="bg-white border-b sticky top-0 z-30 p-2 flex justify-center gap-4 shadow-sm">
         <button onClick={() => setView('table')} className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'table' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>
           课表视图
@@ -103,7 +103,7 @@ export default function AttendanceApp() {
 
       <AnimatePresence mode="wait">
         {view === 'table' ? (
-          <motion.div key="table" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="p-2">
+          <motion.div key="table" className="p-2">
             <div className="w-full overflow-x-auto rounded-xl border bg-white shadow-sm">
               <table className="w-full border-collapse table-fixed min-w-[380px]">
                 <thead>
@@ -144,7 +144,7 @@ export default function AttendanceApp() {
             </div>
           </motion.div>
         ) : (
-          <motion.div key="stats" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="p-4">
+          <motion.div key="stats" className="p-4">
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <table className="w-full border-collapse text-center">
                 <thead>
@@ -175,23 +175,18 @@ export default function AttendanceApp() {
         )}
       </AnimatePresence>
 
-      {/* 居中详情面板 */}
       <AnimatePresence>
         {selectedCourse && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-              onClick={() => setSelectedCourse(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-            
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedCourse(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
               <div className="bg-[#1E40AF] p-6 text-white text-center">
                 <h2 className="text-lg font-bold">{selectedCourse.name}</h2>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   {[{s:'出席',c:'bg-green-500'}, {s:'遅刻',c:'bg-orange-400'}, {s:'欠席',c:'bg-red-500'}].map(b => (
-                    <button key={b.s} onClick={() => handleCheckIn(selectedCourse.id, b.s)}
-                      className={`${b.c} text-white py-3 rounded-2xl shadow-lg active:scale-95 transition-all font-bold text-xs`}>
+                    <button key={b.s} onClick={() => handleCheckIn(selectedCourse.id, b.s)} className={`${b.c} text-white py-3 rounded-2xl shadow-lg active:scale-95 transition-all font-bold text-xs`}>
                       {b.s === '遅刻' ? '迟到' : b.s === '欠席' ? '欠席' : '出席'}
                     </button>
                   ))}
@@ -201,18 +196,16 @@ export default function AttendanceApp() {
                     <div key={record.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
                       <input 
                         type="datetime-local" 
-                        // 关键修复：使用手动格式化函数
                         defaultValue={toLocalISOString(record.created_at)}
-                        // 使用 onBlur 确保失去焦点时才更新，防止输入过程中产生多余请求
                         onBlur={(e) => updateRecordTime(record.id, e.target.value)}
                         className="text-[11px] bg-transparent text-slate-600 outline-none border-none font-mono"
                       />
-                      <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-2 transition-colors">✕</button>
+                      <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-2">✕</button>
                     </div>
                   ))}
                 </div>
               </div>
-              <button onClick={() => setSelectedCourse(null)} className="w-full py-3 bg-slate-50 text-slate-400 text-xs font-bold hover:bg-slate-100">关闭</button>
+              <button onClick={() => setSelectedCourse(null)} className="w-full py-3 bg-slate-50 text-slate-400 text-xs font-bold">关闭</button>
             </motion.div>
           </div>
         )}
@@ -220,8 +213,7 @@ export default function AttendanceApp() {
 
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-blue-600 text-white px-6 py-2 rounded-full shadow-2xl font-bold text-sm">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-blue-600 text-white px-6 py-2 rounded-full shadow-2xl font-bold text-sm">
             {toast}
           </motion.div>
         )}
