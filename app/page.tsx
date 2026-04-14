@@ -86,13 +86,17 @@ export default function AttendanceApp() {
     setLoading(false);
   }
 
+  // --- 修改：支持随意输入用户名 ---
   async function handleAuth() {
     setLoading(true);
+    // 自动转换用户名到伪邮箱格式
+    const fakeEmail = email.includes('@') ? email : `${email}@temp.app`;
+
     const { error } = isRegister 
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+      ? await supabase.auth.signUp({ email: fakeEmail, password })
+      : await supabase.auth.signInWithPassword({ email: fakeEmail, password });
     
-    if (error) alert(error.message);
+    if (error) alert(error.message === "User already registered" ? "该用户名已被注册，请直接登录" : error.message);
     setLoading(false);
   }
 
@@ -198,17 +202,25 @@ export default function AttendanceApp() {
         <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-blue-900">课表助手</h1>
-            <p className="text-slate-400 text-sm mt-2">{isRegister ? '创建新账号' : '请先登录'}</p>
+            <p className="text-slate-400 text-sm mt-2">{isRegister ? '正在创建新账号' : '请使用用户名登录'}</p>
           </div>
           <div className="space-y-4">
-            <input type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-blue-500" />
+            {/* 修改：type="text" 适配用户名 */}
+            <input type="text" placeholder="用户名" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-blue-500" />
             <input type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-blue-500" />
             <button onClick={handleAuth} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
-              {isRegister ? '注册' : '登录'}
+              {isRegister ? '立即注册' : '登录'}
             </button>
           </div>
-          <button onClick={() => setIsRegister(!isRegister)} className="w-full text-xs text-slate-400 text-center">
-            {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
+          {/* 修改：显著强调“注册”字样 */}
+          <button onClick={() => setIsRegister(!isRegister)} className="w-full text-center">
+            {isRegister ? (
+              <span className="text-xs text-slate-400">已有账号？去登录</span>
+            ) : (
+              <div className="text-xs text-slate-500">
+                没有账号？请点击这里 <span className="text-red-600 font-black underline text-sm ml-1">注册新账号</span>
+              </div>
+            )}
           </button>
         </div>
       </div>
@@ -228,7 +240,7 @@ export default function AttendanceApp() {
     <div className="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-900">
       <div className="bg-white border-b sticky top-0 z-30 p-2 flex justify-between items-center px-4 shadow-sm">
         <div className="flex gap-2 items-center">
-          {/* 新增按钮：跳转学校课程系统 */}
+          {/* 跳转学校课程系统 */}
           <a 
             href="https://syllabus.ritsumei.ac.jp/syllabus/search/search_top.do" 
             target="_blank" 
