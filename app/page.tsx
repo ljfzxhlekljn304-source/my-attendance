@@ -99,14 +99,10 @@ export default function AttendanceApp() {
     if (!error) { setSelectedCourse({ ...course, name: newName, room: newRoom }); fetchData(); showSuccess("修改成功"); }
   }
 
-  // --- 删除课程功能 ---
   async function deleteCourse(courseId: any) {
     if (!confirm("确定要删除这门课程吗？这将同时删除该课程的所有出勤记录，且无法恢复。")) return;
-    
-    // 先删除关联的记录（如果数据库没开级联删除，这一步必做）
     await supabase.from('attendance_records').delete().eq('course_id', courseId);
     const { error } = await supabase.from('courses').delete().eq('id', courseId);
-
     if (!error) {
       setSelectedCourse(null);
       fetchData();
@@ -247,14 +243,18 @@ export default function AttendanceApp() {
               <table className="w-full border-collapse text-center">
                 <thead><tr className="bg-yellow-200 border-b"><th className="py-2 border-r text-xs font-bold text-black">科目名</th><th className="py-2 border-r text-xs font-bold w-16 text-black">出席</th><th className="py-2 border-r text-xs font-bold w-16 text-black">迟到</th><th className="py-2 text-xs font-bold w-16 text-black">欠席</th></tr></thead>
                 <tbody>
-                  {courses.map(course => (
-                    <tr key={course.id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
-                      <td className="py-2 px-3 border-r text-[11px] text-left text-slate-700 font-medium">{course.name}</td>
-                      <td className="py-2 border-r text-[12px] font-mono">{getCount(course.id, '出席')}</td>
-                      <td className="py-2 border-r text-[12px] font-mono">{getCount(course.id, '遅刻')}</td>
-                      <td className="py-2 text-[12px] font-mono">{getCount(course.id, '欠席')}</td>
-                    </tr>
-                  ))}
+                  {courses.map(course => {
+                    const lateCount = getCount(course.id, '遅刻');
+                    const absentCount = getCount(course.id, '欠席');
+                    return (
+                      <tr key={course.id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                        <td className="py-2 px-3 border-r text-[11px] text-left text-slate-700 font-medium">{course.name}</td>
+                        <td className="py-2 border-r text-[12px] font-mono">{getCount(course.id, '出席')}</td>
+                        <td className={`py-2 border-r text-[12px] font-mono ${lateCount > 0 ? 'bg-orange-100 text-orange-700' : ''}`}>{lateCount}</td>
+                        <td className={`py-2 text-[12px] font-mono ${absentCount > 0 ? 'bg-red-100 text-red-700' : ''}`}>{absentCount}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -271,7 +271,7 @@ export default function AttendanceApp() {
                 <h2 className="text-lg font-bold cursor-pointer" onClick={() => editCourseInfo(selectedCourse)}>{selectedCourse.name}</h2>
                 <div className="mt-3 flex justify-center gap-2">
                   <button onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)} className="bg-white/20 text-[10px] px-3 py-1 rounded-full border border-white/40">🔗 链接</button>
-                  {selectedCourse.link && <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">🚀 跳转</a>}
+                  {selectedCourse.link && <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedLink}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">🚀 跳转</a>}
                 </div>
               </div>
               <div className="p-6">
@@ -298,7 +298,6 @@ export default function AttendanceApp() {
                   ))}
                 </div>
               </div>
-              {/* 删除整门课程 */}
               <button 
                 onClick={() => deleteCourse(selectedCourse.id)}
                 className="w-full py-2 bg-red-50 text-red-400 text-[10px] font-bold border-t border-red-100 hover:bg-red-100 transition-colors"
