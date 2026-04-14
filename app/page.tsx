@@ -20,6 +20,43 @@ export default function AttendanceApp() {
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // --- 核心更新：监听并处理来自官网回传的数据 ---
+  useEffect(() => {
+    if (!user || loading) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const autoName = params.get('autoName');
+    const autoRoom = params.get('autoRoom');
+
+    if (autoName) {
+      handleAutoAdd(autoName, autoRoom);
+    }
+  }, [user, loading]);
+
+  async function handleAutoAdd(name: string, room: string | null) {
+    const confirmed = confirm(`检测到来自官网的数据：\n\n课程：${name}\n教室：${room || '未设定'}\n\n是否添加到课表？`);
+    
+    if (!confirmed) {
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+    
+    const finalDay = parseInt(prompt("星期几？(月:1, 火:2, 水:3, 木:4, 金:5)", "1") || "1");
+    const finalSlot = prompt("第几节课开始的时间？(例如 9:00)", "9:00");
+
+    const { error } = await supabase.from('courses').insert([{ 
+      name, room, day_of_week: finalDay, 
+      time_slot: finalSlot,
+      user_id: user.id 
+    }]);
+
+    if (!error) { 
+      await fetchData(); 
+      showSuccess("官网课程同步成功！"); 
+      window.history.replaceState({}, '', window.location.pathname); 
+    }
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -78,6 +115,12 @@ export default function AttendanceApp() {
   };
 
   async function addNewCourse(dayOfWeek: number, timeRange: string) {
+    const shouldSearch = confirm("是否前往立命馆大学 Syllabus 搜索课程信息？");
+    if (shouldSearch) {
+      window.open('https://syllabus.ritsumei.ac.jp/syllabus/s/', '_blank');
+      return;
+    }
+
     const name = prompt("输入新课程名称：");
     if (!name) return;
     const room = prompt("输入教室地点：", "");
@@ -153,7 +196,7 @@ export default function AttendanceApp() {
   if (!user && !loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-900">
-        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-sm space-y-6">
+        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-blue-900">课表助手</h1>
             <p className="text-slate-400 text-sm mt-2">{isRegister ? '创建新账号' : '请先登录'}</p>
