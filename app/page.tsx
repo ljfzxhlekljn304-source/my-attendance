@@ -86,7 +86,6 @@ export default function AttendanceApp() {
     setLoading(false);
   }
 
-  // --- 修改：支持随意输入用户名 ---
   async function handleAuth() {
     setLoading(true);
     // 自动转换用户名到伪邮箱格式
@@ -205,14 +204,12 @@ export default function AttendanceApp() {
             <p className="text-slate-400 text-sm mt-2">{isRegister ? '正在创建新账号' : '请使用用户名登录'}</p>
           </div>
           <div className="space-y-4">
-            {/* 修改：type="text" 适配用户名 */}
             <input type="text" placeholder="用户名" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-blue-500" />
             <input type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-blue-500" />
             <button onClick={handleAuth} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
               {isRegister ? '立即注册' : '登录'}
             </button>
           </div>
-          {/* 修改：显著强调“注册”字样 */}
           <button onClick={() => setIsRegister(!isRegister)} className="w-full text-center">
             {isRegister ? (
               <span className="text-xs text-slate-400">已有账号？去登录</span>
@@ -240,7 +237,6 @@ export default function AttendanceApp() {
     <div className="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-900">
       <div className="bg-white border-b sticky top-0 z-30 p-2 flex justify-between items-center px-4 shadow-sm">
         <div className="flex gap-2 items-center">
-          {/* 跳转学校课程系统 */}
           <a 
             href="https://syllabus.ritsumei.ac.jp/syllabus/search/search_top.do" 
             target="_blank" 
@@ -252,7 +248,14 @@ export default function AttendanceApp() {
           <button onClick={() => setView('table')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'table' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>课表</button>
           <button onClick={() => setView('stats')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'stats' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>汇总</button>
         </div>
-        <button onClick={handleLogout} className="text-[10px] text-red-400 border border-red-100 px-3 py-1 rounded-full">退出登录</button>
+        
+        <div className="flex items-center gap-3">
+          {/* 显示当前登录名 */}
+          <span className="text-[10px] text-slate-400 font-medium">
+            👤 {user?.email?.split('@')[0]}
+          </span>
+          <button onClick={handleLogout} className="text-[10px] text-red-400 border border-red-100 px-3 py-1 rounded-full">退出登录</button>
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
