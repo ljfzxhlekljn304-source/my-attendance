@@ -73,10 +73,10 @@ export default function AttendanceApp() {
     }
   }
 
-  // --- 新功能函数：更新备注 ---
+  // --- 修复功能：更新备注 ---
   async function updateRemark(recordId: any, currentRemark: string) {
-    const newRemark = prompt("请输入备注内容：", currentRemark || "");
-    if (newRemark === null) return;
+    const newRemark = prompt("修改/添加备注：", currentRemark || "");
+    if (newRemark === null) return; // 点击取消
 
     const { error } = await supabase
       .from('attendance_records')
@@ -84,15 +84,15 @@ export default function AttendanceApp() {
       .eq('id', recordId);
 
     if (!error) {
-      fetchData();
-      showSuccess("备注已更新");
+      await fetchData(); // 必须 await 确保数据刷新
+      showSuccess("备注已保存");
     }
   }
 
-  // --- 新功能函数：更新课程链接 ---
+  // --- 修复功能：更新课程链接 ---
   async function updateCourseLink(courseId: any, currentLink: string) {
-    const newLink = prompt("请输入课程跳转链接 (需包含 http:// 或 https://)：", currentLink || "");
-    if (newLink === null) return;
+    const newLink = prompt("修改/添加课程链接：", currentLink || "");
+    if (newLink === null) return; // 点击取消
 
     const { error } = await supabase
       .from('courses')
@@ -100,9 +100,9 @@ export default function AttendanceApp() {
       .eq('id', courseId);
 
     if (!error) {
+      const { data: updatedCourse } = await supabase.from('courses').select('*').eq('id', courseId).single();
+      setSelectedCourse(updatedCourse); // 即时更新当前弹窗的链接状态
       fetchData();
-      // 更新当前选中的课程状态，确保 UI 按钮即时出现
-      setSelectedCourse((prev: any) => prev ? { ...prev, link: newLink } : null);
       showSuccess("链接已保存");
     }
   }
@@ -216,17 +216,17 @@ export default function AttendanceApp() {
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
               <div className="bg-[#1E40AF] p-6 text-white text-center relative">
                 <h2 className="text-lg font-bold">{selectedCourse.name}</h2>
-                {/* 功能 2：课程链接设置与跳转 */}
+                {/* 课程链接功能 */}
                 <div className="mt-3 flex justify-center gap-2">
                   <button 
                     onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)}
                     className="bg-white/20 hover:bg-white/30 text-[10px] px-3 py-1 rounded-full border border-white/40 transition-colors"
                   >
-                    🔗 {selectedCourse.link ? '编辑链接' : '设置链接'}
+                    🔗 {selectedCourse.link ? '修改链接' : '设置链接'}
                   </button>
                   {selectedCourse.link && (
                     <a 
-                      href={selectedCourse.link} 
+                      href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm"
@@ -248,29 +248,36 @@ export default function AttendanceApp() {
                   {records.filter(r => r.course_id === selectedCourse.id).map(record => (
                     <div key={record.id} className="flex flex-col p-2 bg-slate-50 rounded-lg border border-slate-100 gap-1">
                       <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <input 
                             type="datetime-local" 
                             defaultValue={toLocalISOString(record.created_at)}
                             onBlur={(e) => updateRecordTime(record.id, e.target.value)}
-                            className="text-[11px] bg-transparent text-slate-600 outline-none border-none font-mono"
+                            className="text-[10px] bg-transparent text-slate-500 outline-none border-none font-mono w-32"
                           />
-                          {/* 功能 1：添加备注按钮 */}
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            record.status === '出席' ? 'bg-green-100 text-green-600' : 
+                            record.status === '遅刻' ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'
+                          }`}>
+                            {record.status}
+                          </span>
+                          {/* 备注功能：显示备注内容（画圈位置） */}
+                          {record.remark && (
+                            <span className="text-[10px] text-blue-500 font-medium truncate max-w-[80px]">
+                              : {record.remark}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center">
                           <button 
                             onClick={() => updateRemark(record.id, record.remark)}
-                            className="text-[10px] text-blue-400 hover:text-blue-600"
+                            className="text-[10px] text-slate-400 hover:text-blue-500 px-1"
                           >
-                            💬 备注
+                            📝
                           </button>
+                          <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-1">✕</button>
                         </div>
-                        <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-2">✕</button>
                       </div>
-                      {/* 功能 1：备注显示位置（你画圈的位置） */}
-                      {record.remark && (
-                        <div className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 break-all">
-                          {record.remark}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
