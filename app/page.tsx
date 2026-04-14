@@ -15,7 +15,6 @@ export default function AttendanceApp() {
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // 1. 读取显示：将数据库带时区的 ISO 字符串转为本地 input 识别的格式
   const toLocalISOString = (dateStr: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
@@ -43,6 +42,45 @@ export default function AttendanceApp() {
     setTimeout(() => setToast(null), 2000);
   };
 
+  // --- 新增功能：添加新课程 ---
+  async function addNewCourse(dayOfWeek: number, timeRange: string) {
+    const name = prompt("输入新课程名称：");
+    if (!name) return;
+    const room = prompt("输入教室地点：", "");
+    
+    const { error } = await supabase
+      .from('courses')
+      .insert([{ 
+        name, 
+        room, 
+        day_of_week: dayOfWeek, 
+        time_slot: timeRange.split('\n')[0] // 取第一行时间如 9:00
+      }]);
+
+    if (!error) {
+      await fetchData();
+      showSuccess("课程已添加");
+    }
+  }
+
+  // --- 新增功能：编辑现有课程名称和教室 ---
+  async function editCourseInfo(course: any) {
+    const newName = prompt("修改课程名称：", course.name);
+    if (!newName) return;
+    const newRoom = prompt("修改教室地点：", course.room || "");
+    
+    const { error } = await supabase
+      .from('courses')
+      .update({ name: newName, room: newRoom })
+      .eq('id', course.id);
+
+    if (!error) {
+      setSelectedCourse({ ...course, name: newName, room: newRoom });
+      await fetchData();
+      showSuccess("修改成功");
+    }
+  }
+
   async function handleCheckIn(courseId: any, status: string) {
     const { error } = await supabase
       .from('attendance_records')
@@ -54,54 +92,30 @@ export default function AttendanceApp() {
     }
   }
 
-  // 2. 核心修复：更新保存时，手动给字符串加上本地时区后缀 (+09:00)
   async function updateRecordTime(recordId: any, newTime: string) {
     if (!newTime) return;
-    
-    // 强制补全时区，防止数据库误认 UTC。假设你在日本 JST (+09:00)
-    // 如果在中国则改为 +08:00
     const timeWithTimezone = `${newTime}:00+09:00`; 
-
     const { error } = await supabase
       .from('attendance_records')
       .update({ created_at: timeWithTimezone }) 
       .eq('id', recordId);
-
-    if (!error) { 
-      fetchData(); 
-      showSuccess("时间已更新"); 
-    }
+    if (!error) { fetchData(); showSuccess("时间已更新"); }
   }
 
-  // --- 修复功能：更新备注 ---
   async function updateRemark(recordId: any, currentRemark: string) {
     const newRemark = prompt("修改/添加备注：", currentRemark || "");
-    if (newRemark === null) return; // 点击取消
-
-    const { error } = await supabase
-      .from('attendance_records')
-      .update({ remark: newRemark })
-      .eq('id', recordId);
-
-    if (!error) {
-      await fetchData(); // 必须 await 确保数据刷新
-      showSuccess("备注已保存");
-    }
+    if (newRemark === null) return;
+    const { error } = await supabase.from('attendance_records').update({ remark: newRemark }).eq('id', recordId);
+    if (!error) { await fetchData(); showSuccess("备注已保存"); }
   }
 
-  // --- 修复功能：更新课程链接 ---
   async function updateCourseLink(courseId: any, currentLink: string) {
     const newLink = prompt("修改/添加课程链接：", currentLink || "");
-    if (newLink === null) return; // 点击取消
-
-    const { error } = await supabase
-      .from('courses')
-      .update({ link: newLink })
-      .eq('id', courseId);
-
+    if (newLink === null) return;
+    const { error } = await supabase.from('courses').update({ link: newLink }).eq('id', courseId);
     if (!error) {
       const { data: updatedCourse } = await supabase.from('courses').select('*').eq('id', courseId).single();
-      setSelectedCourse(updatedCourse); // 即时更新当前弹窗的链接状态
+      setSelectedCourse(updatedCourse);
       fetchData();
       showSuccess("链接已保存");
     }
@@ -155,9 +169,10 @@ export default function AttendanceApp() {
                       {days.map(day => {
                         const course = courses.find(c => c.day_of_week === dayMap[day] && c.time_slot.startsWith(slot.range.split('\n')[0]));
                         return (
-                          <td key={day} onClick={() => course && setSelectedCourse(course)}
-                            className={`p-1 h-32 vertical-top relative border-r last:border-0 active:bg-blue-100 transition-colors ${course ? 'bg-[#E3F2FD]/40 cursor-pointer' : ''}`}>
-                            {course && (
+                          <td key={day} 
+                            onClick={() => course ? setSelectedCourse(course) : addNewCourse(dayMap[day], slot.range)}
+                            className={`p-1 h-32 vertical-top relative border-r last:border-0 active:bg-blue-100 transition-colors cursor-pointer ${course ? 'bg-[#E3F2FD]/40' : 'hover:bg-slate-50'}`}>
+                            {course ? (
                               <div className="flex flex-col h-full items-center justify-center space-y-2">
                                 <div className="text-[10px] font-bold text-[#1E40AF] text-center px-1 leading-tight">{course.name}</div>
                                 <div className="text-[8px] text-slate-400 font-medium">{course.room}</div>
@@ -167,6 +182,8 @@ export default function AttendanceApp() {
                                   <div className="flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[8px] font-bold">{getCount(course.id, '欠席')}</div>
                                 </div>
                               </div>
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-slate-200 text-xl font-thin">+</div>
                             )}
                           </td>
                         );
@@ -215,22 +232,17 @@ export default function AttendanceApp() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedCourse(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
               <div className="bg-[#1E40AF] p-6 text-white text-center relative">
-                <h2 className="text-lg font-bold">{selectedCourse.name}</h2>
-                {/* 课程链接功能 */}
+                {/* 点击名字即可编辑课程详情 */}
+                <h2 className="text-lg font-bold cursor-pointer hover:bg-white/10 rounded-lg p-1" onClick={() => editCourseInfo(selectedCourse)}>
+                  {selectedCourse.name}
+                  <div className="text-[10px] font-normal opacity-70">点击可修改名称/教室</div>
+                </h2>
                 <div className="mt-3 flex justify-center gap-2">
-                  <button 
-                    onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)}
-                    className="bg-white/20 hover:bg-white/30 text-[10px] px-3 py-1 rounded-full border border-white/40 transition-colors"
-                  >
+                  <button onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)} className="bg-white/20 hover:bg-white/30 text-[10px] px-3 py-1 rounded-full border border-white/40 transition-colors">
                     🔗 {selectedCourse.link ? '修改链接' : '设置链接'}
                   </button>
                   {selectedCourse.link && (
-                    <a 
-                      href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm"
-                    >
+                    <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">
                       🚀 跳转课程
                     </a>
                   )}
@@ -249,32 +261,12 @@ export default function AttendanceApp() {
                     <div key={record.id} className="flex flex-col p-2 bg-slate-50 rounded-lg border border-slate-100 gap-1">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-1">
-                          <input 
-                            type="datetime-local" 
-                            defaultValue={toLocalISOString(record.created_at)}
-                            onBlur={(e) => updateRecordTime(record.id, e.target.value)}
-                            className="text-[10px] bg-transparent text-slate-500 outline-none border-none font-mono w-32"
-                          />
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            record.status === '出席' ? 'bg-green-100 text-green-600' : 
-                            record.status === '遅刻' ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'
-                          }`}>
-                            {record.status}
-                          </span>
-                          {/* 备注功能：显示备注内容（画圈位置） */}
-                          {record.remark && (
-                            <span className="text-[10px] text-blue-500 font-medium truncate max-w-[80px]">
-                              : {record.remark}
-                            </span>
-                          )}
+                          <input type="datetime-local" defaultValue={toLocalISOString(record.created_at)} onBlur={(e) => updateRecordTime(record.id, e.target.value)} className="text-[10px] bg-transparent text-slate-500 outline-none border-none font-mono w-32" />
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${record.status === '出席' ? 'bg-green-100 text-green-600' : record.status === '遅刻' ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'}`}>{record.status}</span>
+                          {record.remark && <span className="text-[10px] text-blue-500 font-medium truncate max-w-[80px]">: {record.remark}</span>}
                         </div>
                         <div className="flex items-center">
-                          <button 
-                            onClick={() => updateRemark(record.id, record.remark)}
-                            className="text-[10px] text-slate-400 hover:text-blue-500 px-1"
-                          >
-                            📝
-                          </button>
+                          <button onClick={() => updateRemark(record.id, record.remark)} className="text-[10px] text-slate-400 hover:text-blue-500 px-1">📝</button>
                           <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-1">✕</button>
                         </div>
                       </div>
