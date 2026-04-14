@@ -21,14 +21,12 @@ export default function AttendanceApp() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    // 检查初始登录状态
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) fetchData();
       else setLoading(false);
     });
 
-    // 监听状态变化
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) fetchData();
@@ -46,7 +44,6 @@ export default function AttendanceApp() {
     setLoading(false);
   }
 
-  // --- 身份验证逻辑 ---
   async function handleAuth() {
     setLoading(true);
     const { error } = isRegister 
@@ -88,7 +85,7 @@ export default function AttendanceApp() {
     const { error } = await supabase.from('courses').insert([{ 
       name, room, day_of_week: dayOfWeek, 
       time_slot: timeRange.split('\n')[0],
-      user_id: user.id // 明确绑定用户ID
+      user_id: user.id 
     }]);
 
     if (!error) { fetchData(); showSuccess("课程已添加"); }
@@ -100,6 +97,21 @@ export default function AttendanceApp() {
     const newRoom = prompt("修改教室地点：", course.room || "");
     const { error } = await supabase.from('courses').update({ name: newName, room: newRoom }).eq('id', course.id);
     if (!error) { setSelectedCourse({ ...course, name: newName, room: newRoom }); fetchData(); showSuccess("修改成功"); }
+  }
+
+  // --- 删除课程功能 ---
+  async function deleteCourse(courseId: any) {
+    if (!confirm("确定要删除这门课程吗？这将同时删除该课程的所有出勤记录，且无法恢复。")) return;
+    
+    // 先删除关联的记录（如果数据库没开级联删除，这一步必做）
+    await supabase.from('attendance_records').delete().eq('course_id', courseId);
+    const { error } = await supabase.from('courses').delete().eq('id', courseId);
+
+    if (!error) {
+      setSelectedCourse(null);
+      fetchData();
+      showSuccess("课程已永久删除");
+    }
   }
 
   async function handleCheckIn(courseId: any, status: string) {
@@ -135,14 +147,13 @@ export default function AttendanceApp() {
   }
 
   async function deleteRecord(recordId: any) {
-    if (!confirm("确定删除吗？")) return;
+    if (!confirm("确定删除这条记录吗？")) return;
     const { error } = await supabase.from('attendance_records').delete().eq('id', recordId);
     if (!error) fetchData();
   }
 
   const getCount = (courseId: any, status: string) => records.filter(r => r.course_id === courseId && r.status === status).length;
 
-  // --- 登录界面渲染 ---
   if (!user && !loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-900">
@@ -287,6 +298,13 @@ export default function AttendanceApp() {
                   ))}
                 </div>
               </div>
+              {/* 删除整门课程 */}
+              <button 
+                onClick={() => deleteCourse(selectedCourse.id)}
+                className="w-full py-2 bg-red-50 text-red-400 text-[10px] font-bold border-t border-red-100 hover:bg-red-100 transition-colors"
+              >
+                🗑️ 删除此课程
+              </button>
               <button onClick={() => setSelectedCourse(null)} className="w-full py-3 bg-slate-50 text-slate-400 text-xs font-bold">关闭</button>
             </motion.div>
           </div>
