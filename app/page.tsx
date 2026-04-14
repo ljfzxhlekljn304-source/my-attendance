@@ -73,6 +73,40 @@ export default function AttendanceApp() {
     }
   }
 
+  // --- 新功能函数：更新备注 ---
+  async function updateRemark(recordId: any, currentRemark: string) {
+    const newRemark = prompt("请输入备注内容：", currentRemark || "");
+    if (newRemark === null) return;
+
+    const { error } = await supabase
+      .from('attendance_records')
+      .update({ remark: newRemark })
+      .eq('id', recordId);
+
+    if (!error) {
+      fetchData();
+      showSuccess("备注已更新");
+    }
+  }
+
+  // --- 新功能函数：更新课程链接 ---
+  async function updateCourseLink(courseId: any, currentLink: string) {
+    const newLink = prompt("请输入课程跳转链接 (需包含 http:// 或 https://)：", currentLink || "");
+    if (newLink === null) return;
+
+    const { error } = await supabase
+      .from('courses')
+      .update({ link: newLink })
+      .eq('id', courseId);
+
+    if (!error) {
+      fetchData();
+      // 更新当前选中的课程状态，确保 UI 按钮即时出现
+      setSelectedCourse((prev: any) => prev ? { ...prev, link: newLink } : null);
+      showSuccess("链接已保存");
+    }
+  }
+
   async function deleteRecord(recordId: any) {
     if (!confirm("确定删除吗？")) return;
     const { error } = await supabase.from('attendance_records').delete().eq('id', recordId);
@@ -180,8 +214,27 @@ export default function AttendanceApp() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedCourse(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
-              <div className="bg-[#1E40AF] p-6 text-white text-center">
+              <div className="bg-[#1E40AF] p-6 text-white text-center relative">
                 <h2 className="text-lg font-bold">{selectedCourse.name}</h2>
+                {/* 功能 2：课程链接设置与跳转 */}
+                <div className="mt-3 flex justify-center gap-2">
+                  <button 
+                    onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)}
+                    className="bg-white/20 hover:bg-white/30 text-[10px] px-3 py-1 rounded-full border border-white/40 transition-colors"
+                  >
+                    🔗 {selectedCourse.link ? '编辑链接' : '设置链接'}
+                  </button>
+                  {selectedCourse.link && (
+                    <a 
+                      href={selectedCourse.link} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm"
+                    >
+                      🚀 跳转课程
+                    </a>
+                  )}
+                </div>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-3 gap-3 mb-6">
@@ -193,14 +246,31 @@ export default function AttendanceApp() {
                 </div>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {records.filter(r => r.course_id === selectedCourse.id).map(record => (
-                    <div key={record.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
-                      <input 
-                        type="datetime-local" 
-                        defaultValue={toLocalISOString(record.created_at)}
-                        onBlur={(e) => updateRecordTime(record.id, e.target.value)}
-                        className="text-[11px] bg-transparent text-slate-600 outline-none border-none font-mono"
-                      />
-                      <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-2">✕</button>
+                    <div key={record.id} className="flex flex-col p-2 bg-slate-50 rounded-lg border border-slate-100 gap-1">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="datetime-local" 
+                            defaultValue={toLocalISOString(record.created_at)}
+                            onBlur={(e) => updateRecordTime(record.id, e.target.value)}
+                            className="text-[11px] bg-transparent text-slate-600 outline-none border-none font-mono"
+                          />
+                          {/* 功能 1：添加备注按钮 */}
+                          <button 
+                            onClick={() => updateRemark(record.id, record.remark)}
+                            className="text-[10px] text-blue-400 hover:text-blue-600"
+                          >
+                            💬 备注
+                          </button>
+                        </div>
+                        <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-2">✕</button>
+                      </div>
+                      {/* 功能 1：备注显示位置（你画圈的位置） */}
+                      {record.remark && (
+                        <div className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 break-all">
+                          {record.remark}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
