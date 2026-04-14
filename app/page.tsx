@@ -227,7 +227,16 @@ export default function AttendanceApp() {
   return (
     <div className="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-900">
       <div className="bg-white border-b sticky top-0 z-30 p-2 flex justify-between items-center px-4 shadow-sm">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* 新增按钮：跳转学校课程系统 */}
+          <a 
+            href="https://syllabus.ritsumei.ac.jp/syllabus/search/search_top.do" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-[10px] bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full font-bold hover:bg-slate-200 transition-colors mr-1"
+          >
+            🔍 查找课程
+          </a>
           <button onClick={() => setView('table')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'table' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>课表</button>
           <button onClick={() => setView('stats')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'stats' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>汇总</button>
         </div>
