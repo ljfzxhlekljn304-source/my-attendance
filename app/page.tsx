@@ -8,12 +8,65 @@ const supabaseAnonKey = 'sb_publishable_Zq6TsEhSAmMEwOFgwjxE5g_uothgtWo';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function AttendanceApp() {
+  const [user, setUser] = useState<any>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
+
   const [view, setView] = useState<'table' | 'stats'>('table');
   const [courses, setCourses] = useState<any[]>([]);
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 检查初始登录状态
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchData();
+      else setLoading(false);
+    });
+
+    // 监听状态变化
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchData();
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function fetchData() {
+    setLoading(true);
+    const { data: coursesData } = await supabase.from('courses').select('*').order('day_of_week', { ascending: true });
+    const { data: recordsData } = await supabase.from('attendance_records').select('*').order('created_at', { ascending: false });
+    setCourses((coursesData as any[]) || []);
+    setRecords((recordsData as any[]) || []);
+    setLoading(false);
+  }
+
+  // --- 身份验证逻辑 ---
+  async function handleAuth() {
+    setLoading(true);
+    const { error } = isRegister 
+      ? await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signInWithPassword({ email, password });
+    
+    if (error) alert(error.message);
+    setLoading(false);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setCourses([]);
+    setRecords([]);
+  }
+
+  const showSuccess = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
+  };
 
   const toLocalISOString = (dateStr: string) => {
     if (!dateStr) return "";
@@ -27,78 +80,40 @@ export default function AttendanceApp() {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  async function fetchData() {
-    const { data: coursesData } = await supabase.from('courses').select('*').order('day_of_week', { ascending: true });
-    const { data: recordsData } = await supabase.from('attendance_records').select('*').order('created_at', { ascending: false });
-    setCourses((coursesData as any[]) || []);
-    setRecords((recordsData as any[]) || []);
-    setLoading(false);
-  }
-
-  useEffect(() => { fetchData(); }, []);
-
-  const showSuccess = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2000);
-  };
-
-  // --- 新增功能：添加新课程 ---
   async function addNewCourse(dayOfWeek: number, timeRange: string) {
     const name = prompt("输入新课程名称：");
     if (!name) return;
     const room = prompt("输入教室地点：", "");
     
-    const { error } = await supabase
-      .from('courses')
-      .insert([{ 
-        name, 
-        room, 
-        day_of_week: dayOfWeek, 
-        time_slot: timeRange.split('\n')[0] // 取第一行时间如 9:00
-      }]);
+    const { error } = await supabase.from('courses').insert([{ 
+      name, room, day_of_week: dayOfWeek, 
+      time_slot: timeRange.split('\n')[0],
+      user_id: user.id // 明确绑定用户ID
+    }]);
 
-    if (!error) {
-      await fetchData();
-      showSuccess("课程已添加");
-    }
+    if (!error) { fetchData(); showSuccess("课程已添加"); }
   }
 
-  // --- 新增功能：编辑现有课程名称和教室 ---
   async function editCourseInfo(course: any) {
     const newName = prompt("修改课程名称：", course.name);
     if (!newName) return;
     const newRoom = prompt("修改教室地点：", course.room || "");
-    
-    const { error } = await supabase
-      .from('courses')
-      .update({ name: newName, room: newRoom })
-      .eq('id', course.id);
-
-    if (!error) {
-      setSelectedCourse({ ...course, name: newName, room: newRoom });
-      await fetchData();
-      showSuccess("修改成功");
-    }
+    const { error } = await supabase.from('courses').update({ name: newName, room: newRoom }).eq('id', course.id);
+    if (!error) { setSelectedCourse({ ...course, name: newName, room: newRoom }); fetchData(); showSuccess("修改成功"); }
   }
 
   async function handleCheckIn(courseId: any, status: string) {
-    const { error } = await supabase
-      .from('attendance_records')
-      .insert([{ course_id: courseId, status, created_at: new Date().toISOString() }]);
-    if (!error) {
-      fetchData();
-      showSuccess(`${status} 打卡成功！`);
-      setSelectedCourse(null);
-    }
+    const { error } = await supabase.from('attendance_records').insert([{ 
+      course_id: courseId, status, created_at: new Date().toISOString(),
+      user_id: user.id 
+    }]);
+    if (!error) { fetchData(); showSuccess(`${status} 打卡成功！`); setSelectedCourse(null); }
   }
 
   async function updateRecordTime(recordId: any, newTime: string) {
     if (!newTime) return;
     const timeWithTimezone = `${newTime}:00+09:00`; 
-    const { error } = await supabase
-      .from('attendance_records')
-      .update({ created_at: timeWithTimezone }) 
-      .eq('id', recordId);
+    const { error } = await supabase.from('attendance_records').update({ created_at: timeWithTimezone }).eq('id', recordId);
     if (!error) { fetchData(); showSuccess("时间已更新"); }
   }
 
@@ -115,9 +130,7 @@ export default function AttendanceApp() {
     const { error } = await supabase.from('courses').update({ link: newLink }).eq('id', courseId);
     if (!error) {
       const { data: updatedCourse } = await supabase.from('courses').select('*').eq('id', courseId).single();
-      setSelectedCourse(updatedCourse);
-      fetchData();
-      showSuccess("链接已保存");
+      setSelectedCourse(updatedCourse); fetchData(); showSuccess("链接已保存");
     }
   }
 
@@ -128,6 +141,30 @@ export default function AttendanceApp() {
   }
 
   const getCount = (courseId: any, status: string) => records.filter(r => r.course_id === courseId && r.status === status).length;
+
+  // --- 登录界面渲染 ---
+  if (!user && !loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-900">
+        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-blue-900">课表助手</h1>
+            <p className="text-slate-400 text-sm mt-2">{isRegister ? '创建新账号' : '请先登录'}</p>
+          </div>
+          <div className="space-y-4">
+            <input type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-blue-500" />
+            <input type="password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-blue-500" />
+            <button onClick={handleAuth} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
+              {isRegister ? '注册' : '登录'}
+            </button>
+          </div>
+          <button onClick={() => setIsRegister(!isRegister)} className="w-full text-xs text-slate-400 text-center">
+            {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) return <div className="h-screen flex items-center justify-center text-blue-500 font-bold">同步中...</div>;
 
@@ -140,13 +177,12 @@ export default function AttendanceApp() {
 
   return (
     <div className="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-900">
-      <div className="bg-white border-b sticky top-0 z-30 p-2 flex justify-center gap-4 shadow-sm">
-        <button onClick={() => setView('table')} className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'table' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>
-          课表视图
-        </button>
-        <button onClick={() => setView('stats')} className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'stats' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>
-          出勤汇总
-        </button>
+      <div className="bg-white border-b sticky top-0 z-30 p-2 flex justify-between items-center px-4 shadow-sm">
+        <div className="flex gap-2">
+          <button onClick={() => setView('table')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'table' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>课表</button>
+          <button onClick={() => setView('stats')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${view === 'stats' ? 'bg-[#1E40AF] text-white shadow-md' : 'text-slate-400'}`}>汇总</button>
+        </div>
+        <button onClick={handleLogout} className="text-[10px] text-red-400 border border-red-100 px-3 py-1 rounded-full">退出登录</button>
       </div>
 
       <AnimatePresence mode="wait">
@@ -198,27 +234,16 @@ export default function AttendanceApp() {
           <motion.div key="stats" className="p-4">
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <table className="w-full border-collapse text-center">
-                <thead>
-                  <tr className="bg-yellow-200 border-b">
-                    <th className="py-2 border-r text-xs font-bold text-black">科目名</th>
-                    <th className="py-2 border-r text-xs font-bold w-16 text-black">出席</th>
-                    <th className="py-2 border-r text-xs font-bold w-16 text-black">迟到</th>
-                    <th className="py-2 text-xs font-bold w-16 text-black">欠席</th>
-                  </tr>
-                </thead>
+                <thead><tr className="bg-yellow-200 border-b"><th className="py-2 border-r text-xs font-bold text-black">科目名</th><th className="py-2 border-r text-xs font-bold w-16 text-black">出席</th><th className="py-2 border-r text-xs font-bold w-16 text-black">迟到</th><th className="py-2 text-xs font-bold w-16 text-black">欠席</th></tr></thead>
                 <tbody>
-                  {courses.map(course => {
-                    const late = getCount(course.id, '遅刻');
-                    const absent = getCount(course.id, '欠席');
-                    return (
-                      <tr key={course.id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
-                        <td className="py-2 px-3 border-r text-[11px] text-left text-slate-700 font-medium">{course.name}</td>
-                        <td className="py-2 border-r text-[12px] font-mono">{getCount(course.id, '出席')}</td>
-                        <td className={`py-2 border-r text-[12px] font-mono ${late > 0 ? 'bg-green-100 text-green-700 font-bold' : ''}`}>{late}</td>
-                        <td className={`py-2 text-[12px] font-mono ${absent > 0 ? 'bg-red-100 text-red-600 font-bold' : ''}`}>{absent}</td>
-                      </tr>
-                    );
-                  })}
+                  {courses.map(course => (
+                    <tr key={course.id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                      <td className="py-2 px-3 border-r text-[11px] text-left text-slate-700 font-medium">{course.name}</td>
+                      <td className="py-2 border-r text-[12px] font-mono">{getCount(course.id, '出席')}</td>
+                      <td className="py-2 border-r text-[12px] font-mono">{getCount(course.id, '遅刻')}</td>
+                      <td className="py-2 text-[12px] font-mono">{getCount(course.id, '欠席')}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -231,29 +256,17 @@ export default function AttendanceApp() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedCourse(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
-              <div className="bg-[#1E40AF] p-6 text-white text-center relative">
-                {/* 点击名字即可编辑课程详情 */}
-                <h2 className="text-lg font-bold cursor-pointer hover:bg-white/10 rounded-lg p-1" onClick={() => editCourseInfo(selectedCourse)}>
-                  {selectedCourse.name}
-                  <div className="text-[10px] font-normal opacity-70">点击可修改名称/教室</div>
-                </h2>
+              <div className="bg-[#1E40AF] p-6 text-white text-center">
+                <h2 className="text-lg font-bold cursor-pointer" onClick={() => editCourseInfo(selectedCourse)}>{selectedCourse.name}</h2>
                 <div className="mt-3 flex justify-center gap-2">
-                  <button onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)} className="bg-white/20 hover:bg-white/30 text-[10px] px-3 py-1 rounded-full border border-white/40 transition-colors">
-                    🔗 {selectedCourse.link ? '修改链接' : '设置链接'}
-                  </button>
-                  {selectedCourse.link && (
-                    <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">
-                      🚀 跳转课程
-                    </a>
-                  )}
+                  <button onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)} className="bg-white/20 text-[10px] px-3 py-1 rounded-full border border-white/40">🔗 链接</button>
+                  {selectedCourse.link && <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">🚀 跳转</a>}
                 </div>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-3 gap-3 mb-6">
-                  {[{s:'出席',c:'bg-green-500'}, {s:'遅刻',c:'bg-orange-400'}, {s:'欠席',c:'bg-red-500'}].map(b => (
-                    <button key={b.s} onClick={() => handleCheckIn(selectedCourse.id, b.s)} className={`${b.c} text-white py-3 rounded-2xl shadow-lg active:scale-95 transition-all font-bold text-xs`}>
-                      {b.s === '遅刻' ? '迟到' : b.s === '欠席' ? '欠席' : '出席'}
-                    </button>
+                  {['出席', '遅刻', '欠席'].map(s => (
+                    <button key={s} onClick={() => handleCheckIn(selectedCourse.id, s)} className={`${s === '出席' ? 'bg-green-500' : s === '遅刻' ? 'bg-orange-400' : 'bg-red-500'} text-white py-3 rounded-2xl shadow-lg font-bold text-xs`}>{s}</button>
                   ))}
                 </div>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
@@ -282,9 +295,7 @@ export default function AttendanceApp() {
 
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-blue-600 text-white px-6 py-2 rounded-full shadow-2xl font-bold text-sm">
-            {toast}
-          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-blue-600 text-white px-6 py-2 rounded-full shadow-2xl font-bold text-sm">{toast}</motion.div>
         )}
       </AnimatePresence>
     </div>
