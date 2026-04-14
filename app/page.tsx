@@ -153,7 +153,7 @@ export default function AttendanceApp() {
   if (!user && !loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-900">
-        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm space-y-6">
+        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-sm space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-blue-900">课表助手</h1>
             <p className="text-slate-400 text-sm mt-2">{isRegister ? '创建新账号' : '请先登录'}</p>
@@ -271,7 +271,7 @@ export default function AttendanceApp() {
                 <h2 className="text-lg font-bold cursor-pointer" onClick={() => editCourseInfo(selectedCourse)}>{selectedCourse.name}</h2>
                 <div className="mt-3 flex justify-center gap-2">
                   <button onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)} className="bg-white/20 text-[10px] px-3 py-1 rounded-full border border-white/40">🔗 链接</button>
-                  {selectedCourse.link && <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedLink}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">🚀 跳转</a>}
+                  {selectedCourse.link && <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">🚀 跳转</a>}
                 </div>
               </div>
               <div className="p-6">
