@@ -23,11 +23,11 @@ export default function AttendanceApp() {
   // 弹窗内的翻页状态：'records' (打卡历史) | 'rules' (成绩判定要求)
   const [detailTab, setDetailTab] = useState<'records' | 'rules'>('records');
 
-  // --- 支持多行换行编辑成绩标准的弹窗状态 ---
+  // 多行文本弹窗状态（替换 prompt）
   const [editingGradingCourse, setEditingGradingCourse] = useState<any>(null);
   const [gradingDraft, setGradingDraft] = useState('');
 
-  // --- 处理书签端发来的抓取数据 ---
+  // --- 新增功能：处理书签端发来的抓取数据 ---
   useEffect(() => {
     if (!user || loading) return;
 
@@ -42,6 +42,7 @@ export default function AttendanceApp() {
       if (confirmed) {
         handleBookmarkAdd(autoName, autoRoom, day, slot);
       } else {
+        // 清理 URL，防止重复弹窗
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
@@ -62,9 +63,11 @@ export default function AttendanceApp() {
     if (!error) { 
       await fetchData(); 
       showSuccess("抓取课程添加成功！"); 
+      // 清理 URL 参数
       window.history.replaceState({}, '', window.location.pathname);
     }
   }
+  // --- 新增功能结束 ---
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -92,6 +95,7 @@ export default function AttendanceApp() {
 
   async function handleAuth() {
     setLoading(true);
+    // 自动转换用户名到伪邮箱格式
     const fakeEmail = email.includes('@') ? email : `${email}@temp.app`;
 
     const { error } = isRegister 
@@ -166,6 +170,7 @@ export default function AttendanceApp() {
     if (!error) { fetchData(); showSuccess(`${status} 打卡成功！`); setSelectedCourse(null); }
   }
 
+  // 点击切换打卡状态（出席 -> 遅刻 -> 欠席 -> 出席）
   async function toggleRecordStatus(recordId: any, currentStatus: string) {
     const statusMap: { [key: string]: string } = {
       '出席': '遅刻',
@@ -204,6 +209,7 @@ export default function AttendanceApp() {
     }
   }
 
+  // 更新课程考核类型小徽章 (🚫, 考, 报)
   async function updateCourseExamTag(courseId: any, newTag: string) {
     const { error } = await supabase.from('courses').update({ exam_tag: newTag }).eq('id', courseId);
     if (!error) {
@@ -213,13 +219,13 @@ export default function AttendanceApp() {
     }
   }
 
-  // 打开多行编辑弹窗
+  // 打开多行编辑弹窗（支持回车）
   function openGradingModal(course: any) {
     setGradingDraft(course.grading_rules || '');
     setEditingGradingCourse(course);
   }
 
-  // 保存多行成绩标准
+  // 保存多行成绩评定标准
   async function saveGradingRules() {
     if (!editingGradingCourse) return;
     const { error } = await supabase
@@ -329,7 +335,7 @@ export default function AttendanceApp() {
                             onClick={() => {
                               if (course) {
                                 setSelectedCourse(course);
-                                setDetailTab('records');
+                                setDetailTab('records'); // 默认展示打卡记录页
                               } else {
                                 addNewCourse(dayMap[day], slot.range);
                               }
@@ -337,6 +343,7 @@ export default function AttendanceApp() {
                             className={`p-1 h-32 vertical-top relative border-r last:border-0 active:bg-blue-100 transition-colors cursor-pointer ${course ? 'bg-[#E3F2FD]/40' : 'hover:bg-slate-50'}`}>
                             {course ? (
                               <div className="flex flex-col h-full items-center justify-center space-y-2 relative">
+                                {/* 首页课程右上角小圆形徽章 */}
                                 {course.exam_tag === '考' && (
                                   <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-xs">
                                     考
@@ -400,7 +407,7 @@ export default function AttendanceApp() {
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
               <div className="bg-[#1E40AF] p-6 text-white text-center relative">
                 
-                {/* 徽章切换选项 */}
+                {/* 标记位置：右上角三个徽章选项（🚫、考、报） */}
                 <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/10 p-1 rounded-full backdrop-blur-xs">
                   <button
                     type="button"
@@ -463,7 +470,7 @@ export default function AttendanceApp() {
                   </span>
                 </div>
 
-                {/* 翻页内容 */}
+                {/* 翻页容器：历史记录 与 考核判定说明 */}
                 <div className="relative overflow-hidden min-h-[190px]">
                   <AnimatePresence mode="wait">
                     {detailTab === 'records' ? (
@@ -506,7 +513,7 @@ export default function AttendanceApp() {
                       <motion.div
                         key="rules-page"
                         initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
                         transition={{ duration: 0.2 }}
                         className="h-full flex flex-col justify-between"
@@ -527,7 +534,7 @@ export default function AttendanceApp() {
                               {selectedCourse.grading_rules || "暂未填写成绩判定标准，点击此处即可编辑录入（例如：定期考试 60%\n中间报告 40%）。"}
                             </p>
                           </div>
-                          <span className="text-[9px] text-amber-500 mt-2">提示：支持换行排列各项考试/小测比例</span>
+                          <span className="text-[9px] text-amber-500 mt-2">提示：支持按回车键换行排版</span>
                         </div>
                       </motion.div>
                     )}
@@ -547,15 +554,26 @@ export default function AttendanceApp() {
         )}
       </AnimatePresence>
 
-      {/* --- 新增：支持回车换行的多行文本编辑弹窗 (Textarea) --- */}
+      {/* --- 支持回车换行的多行文本编辑弹窗 (Textarea 模态框) --- */}
       <AnimatePresence>
         {editingGradingCourse && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingGradingCourse(null)} className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl relative z-10 space-y-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setEditingGradingCourse(null)} 
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" 
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.95, opacity: 0 }} 
+              className="bg-white rounded-3xl w-full max-w-sm p-5 shadow-2xl relative z-10 space-y-4"
+            >
               <div className="flex justify-between items-center">
                 <h3 className="font-bold text-slate-800 text-sm">编辑考核与评定说明</h3>
-                <span className="text-[10px] text-slate-400">支持回车换行</span>
+                <span className="text-[10px] text-slate-400">支持 Enter 键换行</span>
               </div>
               
               <textarea
