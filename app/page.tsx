@@ -20,6 +20,9 @@ export default function AttendanceApp() {
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // 弹窗内的翻页状态：'records' (打卡历史) | 'rules' (成绩判定要求)
+  const [detailTab, setDetailTab] = useState<'records' | 'rules'>('records');
+
   // --- 新增功能：处理书签端发来的抓取数据 ---
   useEffect(() => {
     if (!user || loading) return;
@@ -163,7 +166,7 @@ export default function AttendanceApp() {
     if (!error) { fetchData(); showSuccess(`${status} 打卡成功！`); setSelectedCourse(null); }
   }
 
-  // --- 新增：点击切换打卡状态（出席 -> 遅刻 -> 欠席 -> 出席） ---
+  // 点击切换打卡状态（出席 -> 遅刻 -> 欠席 -> 出席）
   async function toggleRecordStatus(recordId: any, currentStatus: string) {
     const statusMap: { [key: string]: string } = {
       '出席': '遅刻',
@@ -199,6 +202,28 @@ export default function AttendanceApp() {
     if (!error) {
       const { data: updatedCourse } = await supabase.from('courses').select('*').eq('id', courseId).single();
       setSelectedCourse(updatedCourse); fetchData(); showSuccess("链接已保存");
+    }
+  }
+
+  // --- 新增功能：更新课程考核类型小徽章 (🚫, 考, 报) ---
+  async function updateCourseExamTag(courseId: any, newTag: string) {
+    const { error } = await supabase.from('courses').update({ exam_tag: newTag }).eq('id', courseId);
+    if (!error) {
+      setSelectedCourse((prev: any) => ({ ...prev, exam_tag: newTag }));
+      await fetchData();
+      showSuccess(newTag === 'none' ? '已清除徽章' : `徽章已设为【${newTag}】`);
+    }
+  }
+
+  // --- 新增功能：编辑课程成绩判定要求说明 ---
+  async function editCourseGradingRules(courseId: any, currentRules: string) {
+    const newRules = prompt("输入成绩判定要求与考核说明（例如：定期考试60%、随堂小测40%）：", currentRules || "");
+    if (newRules === null) return;
+    const { error } = await supabase.from('courses').update({ grading_rules: newRules }).eq('id', courseId);
+    if (!error) {
+      setSelectedCourse((prev: any) => ({ ...prev, grading_rules: newRules }));
+      await fetchData();
+      showSuccess("成绩要求已保存");
     }
   }
 
@@ -293,10 +318,29 @@ export default function AttendanceApp() {
                         const course = courses.find(c => c.day_of_week === dayMap[day] && c.time_slot.startsWith(slot.range.split('\n')[0]));
                         return (
                           <td key={day} 
-                            onClick={() => course ? setSelectedCourse(course) : addNewCourse(dayMap[day], slot.range)}
+                            onClick={() => {
+                              if (course) {
+                                setSelectedCourse(course);
+                                setDetailTab('records'); // 默认展示打卡记录页
+                              } else {
+                                addNewCourse(dayMap[day], slot.range);
+                              }
+                            }}
                             className={`p-1 h-32 vertical-top relative border-r last:border-0 active:bg-blue-100 transition-colors cursor-pointer ${course ? 'bg-[#E3F2FD]/40' : 'hover:bg-slate-50'}`}>
                             {course ? (
-                              <div className="flex flex-col h-full items-center justify-center space-y-2">
+                              <div className="flex flex-col h-full items-center justify-center space-y-2 relative">
+                                {/* 首页课程右上角小圆形徽章 */}
+                                {course.exam_tag === '考' && (
+                                  <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-xs">
+                                    考
+                                  </span>
+                                )}
+                                {course.exam_tag === '报' && (
+                                  <span className="absolute top-0 right-0 w-4 h-4 bg-emerald-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-xs">
+                                    报
+                                  </span>
+                                )}
+                                
                                 <div className="text-[10px] font-bold text-[#1E40AF] text-center px-1 leading-tight">{course.name}</div>
                                 <div className="text-[8px] text-slate-400 font-medium">{course.room}</div>
                                 <div className="flex gap-1 scale-90">
@@ -347,44 +391,142 @@ export default function AttendanceApp() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedCourse(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10">
-              <div className="bg-[#1E40AF] p-6 text-white text-center">
+              <div className="bg-[#1E40AF] p-6 text-white text-center relative">
+                
+                {/* 标记位置：右上角三个徽章选项（🚫、考、报） */}
+                <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/10 p-1 rounded-full backdrop-blur-xs">
+                  <button
+                    type="button"
+                    onClick={() => updateCourseExamTag(selectedCourse.id, 'none')}
+                    title="无徽章"
+                    className={`w-5 h-5 rounded-full text-[9px] flex items-center justify-center transition-all ${(!selectedCourse.exam_tag || selectedCourse.exam_tag === 'none') ? 'bg-white text-slate-800 font-bold shadow-xs' : 'opacity-60 hover:opacity-100'}`}
+                  >
+                    🚫
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateCourseExamTag(selectedCourse.id, '考')}
+                    title="期末考试"
+                    className={`w-5 h-5 rounded-full text-[9px] flex items-center justify-center font-black transition-all ${selectedCourse.exam_tag === '考' ? 'bg-red-500 text-white shadow-xs scale-105' : 'bg-red-500/40 text-white hover:bg-red-500/70'}`}
+                  >
+                    考
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateCourseExamTag(selectedCourse.id, '报')}
+                    title="报告考核"
+                    className={`w-5 h-5 rounded-full text-[9px] flex items-center justify-center font-black transition-all ${selectedCourse.exam_tag === '报' ? 'bg-emerald-500 text-white shadow-xs scale-105' : 'bg-emerald-500/40 text-white hover:bg-emerald-500/70'}`}
+                  >
+                    报
+                  </button>
+                </div>
+
                 <h2 className="text-lg font-bold cursor-pointer" onClick={() => editCourseInfo(selectedCourse)}>{selectedCourse.name}</h2>
                 <div className="mt-3 flex justify-center gap-2">
                   <button onClick={() => updateCourseLink(selectedCourse.id, selectedCourse.link)} className="bg-white/20 text-[10px] px-3 py-1 rounded-full border border-white/40">🔗 链接</button>
                   {selectedCourse.link && <a href={selectedCourse.link.startsWith('http') ? selectedCourse.link : `https://${selectedCourse.link}`} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 text-blue-900 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">🚀 跳转</a>}
                 </div>
               </div>
+              
               <div className="p-6">
-                <div className="grid grid-cols-3 gap-3 mb-6">
+                <div className="grid grid-cols-3 gap-3 mb-4">
                   {['出席', '遅刻', '欠席'].map(s => (
                     <button key={s} onClick={() => handleCheckIn(selectedCourse.id, s)} className={`${s === '出席' ? 'bg-green-500' : s === '遅刻' ? 'bg-orange-400' : 'bg-red-500'} text-white py-3 rounded-2xl shadow-lg font-bold text-xs`}>{s}</button>
                   ))}
                 </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {records.filter(r => r.course_id === selectedCourse.id).map(record => (
-                    <div key={record.id} className="flex flex-col p-2 bg-slate-50 rounded-lg border border-slate-100 gap-1">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-1">
-                          <input type="datetime-local" defaultValue={toLocalISOString(record.created_at)} onBlur={(e) => updateRecordTime(record.id, e.target.value)} className="text-[10px] bg-transparent text-slate-500 outline-none border-none font-mono w-32" />
-                          <button 
-                            type="button"
-                            onClick={() => toggleRecordStatus(record.id, record.status)}
-                            title="点击切换状态"
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-transform active:scale-95 ${record.status === '出席' ? 'bg-green-100 text-green-600 hover:bg-green-200' : record.status === '遅刻' ? 'bg-orange-100 text-orange-600 hover:bg-orange-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}
-                          >
-                            {record.status}
-                          </button>
-                          {record.remark && <span className="text-[10px] text-blue-500 font-medium truncate max-w-[80px]">: {record.remark}</span>}
+
+                {/* 翻页标签栏 */}
+                <div className="flex justify-between items-center border-b pb-1.5 mb-2 px-1">
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setDetailTab('records')}
+                      className={`text-[11px] font-bold pb-0.5 border-b-2 transition-colors ${detailTab === 'records' ? 'border-[#1E40AF] text-[#1E40AF]' : 'border-transparent text-slate-400'}`}
+                    >
+                      打卡历史 ({records.filter(r => r.course_id === selectedCourse.id).length})
+                    </button>
+                    <button 
+                      onClick={() => setDetailTab('rules')}
+                      className={`text-[11px] font-bold pb-0.5 border-b-2 transition-colors ${detailTab === 'rules' ? 'border-[#1E40AF] text-[#1E40AF]' : 'border-transparent text-slate-400'}`}
+                    >
+                      考核与判定说明 📋
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-slate-300">
+                    {detailTab === 'records' ? '← 向左看说明' : '打卡记录 →'}
+                  </span>
+                </div>
+
+                {/* 翻页容器：历史记录 与 考核判定说明 */}
+                <div className="relative overflow-hidden min-h-[190px]">
+                  <AnimatePresence mode="wait">
+                    {detailTab === 'records' ? (
+                      <motion.div
+                        key="records-page"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-2 max-h-48 overflow-y-auto pr-1"
+                      >
+                        {records.filter(r => r.course_id === selectedCourse.id).length === 0 ? (
+                          <div className="text-center py-10 text-xs text-slate-400">暂无打卡记录</div>
+                        ) : (
+                          records.filter(r => r.course_id === selectedCourse.id).map(record => (
+                            <div key={record.id} className="flex flex-col p-2 bg-slate-50 rounded-lg border border-slate-100 gap-1">
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-1">
+                                  <input type="datetime-local" defaultValue={toLocalISOString(record.created_at)} onBlur={(e) => updateRecordTime(record.id, e.target.value)} className="text-[10px] bg-transparent text-slate-500 outline-none border-none font-mono w-32" />
+                                  <button 
+                                    type="button"
+                                    onClick={() => toggleRecordStatus(record.id, record.status)}
+                                    title="点击切换状态"
+                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-transform active:scale-95 ${record.status === '出席' ? 'bg-green-100 text-green-600 hover:bg-green-200' : record.status === '遅刻' ? 'bg-orange-100 text-orange-600 hover:bg-orange-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}
+                                  >
+                                    {record.status}
+                                  </button>
+                                  {record.remark && <span className="text-[10px] text-blue-500 font-medium truncate max-w-[80px]">: {record.remark}</span>}
+                                </div>
+                                <div className="flex items-center">
+                                  <button onClick={() => updateRemark(record.id, record.remark)} className="text-[10px] text-slate-400 hover:text-blue-500 px-1">📝</button>
+                                  <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-1">✕</button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="rules-page"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.2 }}
+                        className="h-full flex flex-col justify-between"
+                      >
+                        <div 
+                          onClick={() => editCourseGradingRules(selectedCourse.id, selectedCourse.grading_rules)}
+                          className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200/70 cursor-pointer hover:bg-amber-100/60 transition-all min-h-[140px] flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-[11px] font-black text-amber-900 flex items-center gap-1">
+                                📌 成绩评判标准与考核说明
+                              </span>
+                              <span className="text-[10px] text-amber-600 font-bold underline">点击修改 ✏️</span>
+                            </div>
+                            <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">
+                              {selectedCourse.grading_rules || "暂未填写成绩判定标准，点击此处即可编辑录入（例如：定期考试 60%、随堂测验 40%、全得点 60% 以上及格）。"}
+                            </p>
+                          </div>
+                          <span className="text-[9px] text-amber-500 mt-2">提示：包含期末/随堂测验/平时作业比例等要求</span>
                         </div>
-                        <div className="flex items-center">
-                          <button onClick={() => updateRemark(record.id, record.remark)} className="text-[10px] text-slate-400 hover:text-blue-500 px-1">📝</button>
-                          <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 px-1">✕</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
+
               <button 
                 onClick={() => deleteCourse(selectedCourse.id)}
                 className="w-full py-2 bg-red-50 text-red-400 text-[10px] font-bold border-t border-red-100 hover:bg-red-100 transition-colors"
