@@ -470,27 +470,26 @@ export default function AttendanceApp() {
                   </span>
                 </div>
 
-                {/* 翻页容器：已修复拖拽跑偏问题（使用 dragSnapToOrigin 回弹） */}
-                <div className="relative overflow-hidden min-h-[190px]">
+                {/* 翻页容器：改用 onPanEnd 纯手势判定，杜绝卡片被拖偏、缺角的问题 */}
+                <motion.div 
+                  className="relative overflow-hidden min-h-[190px] w-full"
+                  onPanEnd={(_e, info) => {
+                    if (info.offset.x < -35 && detailTab === 'records') {
+                      setDetailTab('rules'); // 向左滑切到说明
+                    } else if (info.offset.x > 35 && detailTab === 'rules') {
+                      setDetailTab('records'); // 向右滑切回打卡记录
+                    }
+                  }}
+                >
                   <AnimatePresence mode="wait">
                     {detailTab === 'records' ? (
                       <motion.div
                         key="records-page"
-                        drag="x"
-                        dragDirectionLock
-                        dragSnapToOrigin
-                        dragConstraints={{ left: -50, right: 0 }}
-                        dragElastic={0.1}
-                        onDragEnd={(_e, info) => {
-                          if (info.offset.x < -40 || info.velocity.x < -300) {
-                            setDetailTab('rules'); // 向左滑切换到说明
-                          }
-                        }}
-                        initial={{ opacity: 0, x: -20 }}
+                        initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        transition={{ duration: 0.2 }}
-                        className="space-y-2 max-h-48 overflow-y-auto pr-1 touch-pan-y"
+                        exit={{ opacity: 0, x: 10 }}
+                        transition={{ duration: 0.15 }}
+                        className="space-y-2 max-h-48 overflow-y-auto pr-1 w-full"
                       >
                         {records.filter(r => r.course_id === selectedCourse.id).length === 0 ? (
                           <div className="text-center py-10 text-xs text-slate-400">暂无打卡记录</div>
@@ -522,25 +521,15 @@ export default function AttendanceApp() {
                     ) : (
                       <motion.div
                         key="rules-page"
-                        drag="x"
-                        dragDirectionLock
-                        dragSnapToOrigin
-                        dragConstraints={{ left: 0, right: 50 }}
-                        dragElastic={0.1}
-                        onDragEnd={(_e, info) => {
-                          if (info.offset.x > 40 || info.velocity.x > 300) {
-                            setDetailTab('records'); // 向右滑切回打卡记录
-                          }
-                        }}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: -20 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.2 }}
-                        className="h-full flex flex-col justify-between touch-pan-y"
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        transition={{ duration: 0.15 }}
+                        className="h-full w-full flex flex-col justify-between"
                       >
                         <div 
                           onClick={() => openGradingModal(selectedCourse)}
-                          className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200/70 cursor-pointer hover:bg-amber-100/60 transition-all min-h-[140px] flex flex-col justify-between"
+                          className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200/70 cursor-pointer hover:bg-amber-100/60 transition-all min-h-[140px] flex flex-col justify-between w-full box-border"
                         >
                           <div>
                             <div className="flex justify-between items-center mb-2">
@@ -550,7 +539,7 @@ export default function AttendanceApp() {
                               <span className="text-[10px] text-amber-600 font-bold underline">点击修改 ✏️</span>
                             </div>
                             {selectedCourse.grading_rules ? (
-                              <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">
+                              <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-sans break-words">
                                 {selectedCourse.grading_rules}
                               </p>
                             ) : (
@@ -563,7 +552,7 @@ export default function AttendanceApp() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
+                </motion.div>
               </div>
 
               <button 
