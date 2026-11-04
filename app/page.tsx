@@ -163,6 +163,21 @@ export default function AttendanceApp() {
     if (!error) { fetchData(); showSuccess(`${status} 打卡成功！`); setSelectedCourse(null); }
   }
 
+  // --- 新增：点击切换打卡状态（出席 -> 遅刻 -> 欠席 -> 出席） ---
+  async function toggleRecordStatus(recordId: any, currentStatus: string) {
+    const statusMap: { [key: string]: string } = {
+      '出席': '遅刻',
+      '遅刻': '欠席',
+      '欠席': '出席'
+    };
+    const nextStatus = statusMap[currentStatus] || '出席';
+    const { error } = await supabase.from('attendance_records').update({ status: nextStatus }).eq('id', recordId);
+    if (!error) {
+      await fetchData();
+      showSuccess(`状态已更改为：${nextStatus}`);
+    }
+  }
+
   async function updateRecordTime(recordId: any, newTime: string) {
     if (!newTime) return;
     const timeWithTimezone = `${newTime}:00+09:00`; 
@@ -250,7 +265,6 @@ export default function AttendanceApp() {
         </div>
         
         <div className="flex items-center gap-3">
-          {/* 显示当前登录名 */}
           <span className="text-[10px] text-slate-400 font-medium">
             👤 {user?.email?.split('@')[0]}
           </span>
@@ -352,7 +366,14 @@ export default function AttendanceApp() {
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-1">
                           <input type="datetime-local" defaultValue={toLocalISOString(record.created_at)} onBlur={(e) => updateRecordTime(record.id, e.target.value)} className="text-[10px] bg-transparent text-slate-500 outline-none border-none font-mono w-32" />
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${record.status === '出席' ? 'bg-green-100 text-green-600' : record.status === '遅刻' ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'}`}>{record.status}</span>
+                          <button 
+                            type="button"
+                            onClick={() => toggleRecordStatus(record.id, record.status)}
+                            title="点击切换状态"
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-transform active:scale-95 ${record.status === '出席' ? 'bg-green-100 text-green-600 hover:bg-green-200' : record.status === '遅刻' ? 'bg-orange-100 text-orange-600 hover:bg-orange-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}
+                          >
+                            {record.status}
+                          </button>
                           {record.remark && <span className="text-[10px] text-blue-500 font-medium truncate max-w-[80px]">: {record.remark}</span>}
                         </div>
                         <div className="flex items-center">
