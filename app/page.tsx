@@ -470,17 +470,19 @@ export default function AttendanceApp() {
                   </span>
                 </div>
 
-                {/* 翻页容器：支持手指/鼠标左右滑动切换 */}
-                <div className="relative overflow-hidden min-h-[190px] touch-pan-y">
+                {/* 翻页容器：已修复拖拽跑偏问题（使用 dragSnapToOrigin 回弹） */}
+                <div className="relative overflow-hidden min-h-[190px]">
                   <AnimatePresence mode="wait">
                     {detailTab === 'records' ? (
                       <motion.div
                         key="records-page"
                         drag="x"
-                        dragConstraints={{ left: 0, right: 0 }}
-                        dragElastic={0.2}
+                        dragDirectionLock
+                        dragSnapToOrigin
+                        dragConstraints={{ left: -50, right: 0 }}
+                        dragElastic={0.1}
                         onDragEnd={(_e, info) => {
-                          if (info.offset.x < -40) {
+                          if (info.offset.x < -40 || info.velocity.x < -300) {
                             setDetailTab('rules'); // 向左滑切换到说明
                           }
                         }}
@@ -488,7 +490,7 @@ export default function AttendanceApp() {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
                         transition={{ duration: 0.2 }}
-                        className="space-y-2 max-h-48 overflow-y-auto pr-1"
+                        className="space-y-2 max-h-48 overflow-y-auto pr-1 touch-pan-y"
                       >
                         {records.filter(r => r.course_id === selectedCourse.id).length === 0 ? (
                           <div className="text-center py-10 text-xs text-slate-400">暂无打卡记录</div>
@@ -521,10 +523,12 @@ export default function AttendanceApp() {
                       <motion.div
                         key="rules-page"
                         drag="x"
-                        dragConstraints={{ left: 0, right: 0 }}
-                        dragElastic={0.2}
+                        dragDirectionLock
+                        dragSnapToOrigin
+                        dragConstraints={{ left: 0, right: 50 }}
+                        dragElastic={0.1}
                         onDragEnd={(_e, info) => {
-                          if (info.offset.x > 40) {
+                          if (info.offset.x > 40 || info.velocity.x > 300) {
                             setDetailTab('records'); // 向右滑切回打卡记录
                           }
                         }}
@@ -532,7 +536,7 @@ export default function AttendanceApp() {
                         animate={{ opacity: 1, x: -20 }}
                         exit={{ opacity: 0, x: -20 }}
                         transition={{ duration: 0.2 }}
-                        className="h-full flex flex-col justify-between"
+                        className="h-full flex flex-col justify-between touch-pan-y"
                       >
                         <div 
                           onClick={() => openGradingModal(selectedCourse)}
