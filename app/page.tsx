@@ -466,16 +466,24 @@ export default function AttendanceApp() {
                     </button>
                   </div>
                   <span className="text-[9px] text-slate-300">
-                    {detailTab === 'records' ? '← 向左看说明' : '打卡记录 →'}
+                    {detailTab === 'records' ? '← 左滑看说明' : '右滑看打卡 →'}
                   </span>
                 </div>
 
-                {/* 翻页容器：历史记录 与 考核判定说明 */}
-                <div className="relative overflow-hidden min-h-[190px]">
+                {/* 翻页容器：支持手指/鼠标左右滑动切换 */}
+                <div className="relative overflow-hidden min-h-[190px] touch-pan-y">
                   <AnimatePresence mode="wait">
                     {detailTab === 'records' ? (
                       <motion.div
                         key="records-page"
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.2}
+                        onDragEnd={(_e, info) => {
+                          if (info.offset.x < -40) {
+                            setDetailTab('rules'); // 向左滑切换到说明
+                          }
+                        }}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
@@ -512,13 +520,20 @@ export default function AttendanceApp() {
                     ) : (
                       <motion.div
                         key="rules-page"
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.2}
+                        onDragEnd={(_e, info) => {
+                          if (info.offset.x > 40) {
+                            setDetailTab('records'); // 向右滑切回打卡记录
+                          }
+                        }}
                         initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
+                        animate={{ opacity: 1, x: -20 }}
                         exit={{ opacity: 0, x: -20 }}
                         transition={{ duration: 0.2 }}
                         className="h-full flex flex-col justify-between"
                       >
-                        {/* 点击调用 openGradingModal 打开支持换行的多行编辑弹窗 */}
                         <div 
                           onClick={() => openGradingModal(selectedCourse)}
                           className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200/70 cursor-pointer hover:bg-amber-100/60 transition-all min-h-[140px] flex flex-col justify-between"
@@ -530,11 +545,16 @@ export default function AttendanceApp() {
                               </span>
                               <span className="text-[10px] text-amber-600 font-bold underline">点击修改 ✏️</span>
                             </div>
-                            <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">
-                              {selectedCourse.grading_rules || "暂未填写成绩判定标准，点击此处即可编辑录入（例如：定期考试 60%\n中间报告 40%）。"}
-                            </p>
+                            {selectedCourse.grading_rules ? (
+                              <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">
+                                {selectedCourse.grading_rules}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic opacity-60 whitespace-pre-wrap leading-relaxed font-sans">
+                                {"暂未填写成绩判定标准，点击此处即可编辑录入\n（例如：定期考试 60%\n中间报告 40%）"}
+                              </p>
+                            )}
                           </div>
-                          <span className="text-[9px] text-amber-500 mt-2">提示：支持按回车键换行排版</span>
                         </div>
                       </motion.div>
                     )}
